@@ -43,6 +43,7 @@ sd_card*/
 *_summary
 *.cdo
 *.bsp
+*.tar.gz
 *.old
 
 # Makefile tokens

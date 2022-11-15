@@ -113,7 +113,7 @@ clean:
 	$(WAIT) "Cleaning HW platform"
 	$(RM) -r ${BUILD_DIR}/${XSA}
 	$(RM) -r ${BUILD_DIR}
-	$(RM) -r vivado.log *.jou .Xil
+	$(RM) -r vivado.log vivado_*.backup.log *.jou .Xil
 	$(OK) "Successfully cleaned HW platform"
 
 # =========================================================
@@ -129,6 +129,9 @@ xsa: ${BUILD_DIR}/${XSA}
 ${BUILD_DIR}/${XPR}: ${BUILD_DIR}/${XSA}
 ${BUILD_DIR}/${XSA}: ${DEPS}
 	$(WAIT) "Creating XSA"
+	$(INFO) "Cleaning Vivado .log & .jou files from last session"
+	$(RM) -r vivado.log vivado_*.backup.log *.jou
+	$(INFO) "Creating XSA"
 	$(VIVADO) -source ${CREATE_XSA_TCL} -tclargs ${CREATE_XSA_ARGS} && \
 	( \
 		cp vivado.log ${TIME}_PASS_vivado.log; \

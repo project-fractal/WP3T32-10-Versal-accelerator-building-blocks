@@ -19,11 +19,11 @@
 ## DEVICE_NAME (e.g. xcvc1902-vsva2197-1LP-e-S)
 ## ===================================================================================
 namespace eval _tcl {
-  proc get_script_folder {} {
-    set script_path [file normalize [info script]]
-    set script_folder [file dirname $script_path]
-    return $script_folder
-  }
+    proc get_script_folder {} {
+        set script_path [file normalize [info script]]
+        set script_folder [file dirname $script_path]
+        return $script_folder
+    }
 }
 
 variable script_folder
@@ -141,32 +141,33 @@ variable pre_synth
 set pre_synth ""
 
 if { $argc > 1} {
-  set pre_synth [lindex $argv 5]
-  set jobs [lindex $argv 6]
+    set pre_synth [lindex $argv 5]
+    set jobs [lindex $argv 6]
 }
 #Pre_synth Platform Flow
 if {$pre_synth} {
-  set_property platform.platform_state "pre_synth" [current_project]
-  write_hw_platform -force ${BUILD_DIR}/${PLATFORM_NAME}.xsa
-  validate_hw_platform ${BUILD_DIR}/${PLATFORM_NAME}.xsa
+    set_property platform.platform_state "pre_synth" [current_project]
+    write_hw_platform -hw -force ${BUILD_DIR}/${PLATFORM_NAME}.xsa
+    # write_hw_platform -hw_emu -force ${BUILD_DIR}/${PLATFORM_NAME}_emu.xsa
+    validate_hw_platform ${BUILD_DIR}/${PLATFORM_NAME}.xsa
 } else {
-  set_property generate_synth_checkpoint true [get_files -norecurse *.bd]
-  ## ===================================================================================
-  ## Full Synthesis and implementation
-  ## ===================================================================================
-  launch_runs -jobs ${jobs} synth_1
-  wait_on_run synth_1
-  puts "Synthesis done!"
+    set_property generate_synth_checkpoint true [get_files -norecurse *.bd]
+    ## ===================================================================================
+    ## Full Synthesis and implementation
+    ## ===================================================================================
+    launch_runs -jobs ${jobs} synth_1
+    wait_on_run synth_1
+    puts "Synthesis done!"
 
-  #launch_runs impl_1 -to_step write_bitstream
-  launch_runs -jobs ${jobs} impl_1 -to_step write_device_image
-  wait_on_run impl_1
-  puts "Implementation done!"
+    #launch_runs impl_1 -to_step write_bitstream
+    launch_runs -jobs ${jobs} impl_1 -to_step write_device_image
+    wait_on_run impl_1
+    puts "Implementation done!"
 
-  # ===================================================================================
-  # Write the XSA for current design for use as a hardware platform
-  # ===================================================================================
-  open_run impl_1
-  write_hw_platform -unified -include_bit -force ${BUILD_DIR}/${PLATFORM_NAME}.xsa
-  validate_hw_platform ${BUILD_DIR}/${PLATFORM_NAME}.xsa
+    # ===================================================================================
+    # Write the XSA for current design for use as a hardware platform
+    # ===================================================================================
+    open_run impl_1
+    write_hw_platform -unified -include_bit -force ${BUILD_DIR}/${PLATFORM_NAME}.xsa
+    validate_hw_platform ${BUILD_DIR}/${PLATFORM_NAME}.xsa
 }

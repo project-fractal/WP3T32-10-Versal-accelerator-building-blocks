@@ -34,6 +34,7 @@ log
 ultra96_x
 zcu10?_x
 build*/
+common_image*/
 sd_card*/
 .vscode
 *.ltx

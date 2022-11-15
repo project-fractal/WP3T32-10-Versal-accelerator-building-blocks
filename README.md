@@ -11,22 +11,26 @@ This repository includes all necessary files and scripts for developing a Vitis 
 
 ## Getting Started
 
-The whole build flow requires [Vitis Core Development Kit](https://www.xilinx.com/products/design-tools/vitis/vitis-platform.html) version 2021.2 installed in the host machine with a suitable license for Vivado&reg; Design Suite (a temporary license for Versal devices should be enough). It is available from the following link: [Vitis (SW Developer) - Download link](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/vitis/2021-1.html).
+The whole build flow requires [Vitis Core Development Kit](https://www.xilinx.com/products/design-tools/vitis/vitis-platform.html) version 2021.2 installed in the host machine with a suitable license for Vivado&reg; Design Suite (a temporary license for Versal devices should be enough). It is available from the following link: [Vitis (SW Developer) - Download link](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/vitis/2021-2.html).
 
-PetaLinux OS builds on a docker container (generated automatically). For this, install Docker in the host machine following the [following instructions](https://docs.docker.com/engine/install/ubuntu/#install-using-the-convenience-script) and download the PetaLinux installer to the [src/](src/) directory (it is available from [Xilinx's website](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/embedded-platforms/2021-1.html)).
+Additionally, download the PetaLinux installer to the [src/](src/) directory (it is available from [Xilinx's website](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/embedded-platforms/2021-2.html)). It is required to build the PetaLinux OS.
 
-Also, make sure to download the VCK190 BSP from [Xilinx's website](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/embedded-platforms/2021-1.html) and place it in the [src/](src/) directory.
+> **Optional**:
+>
+> PetaLinux OS can be build on a docker container (generated automatically). The Docker build-flow is disabled by default, but Docker is required to be already installed in the host machine if enabled. Follow these [instructions](https://docs.docker.com/engine/install/ubuntu/#install-using-the-convenience-script).
+
+Also, make sure to download the VCK190 BSP from [Xilinx's website](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/embedded-platforms/2021-2.html), as well as the Versal Common image also from [Xilinx's website](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/embedded-design-tools/2021-2.html), and place them in the [src/](src/) directory.
 
 To start the build process, execute the following command from the Linux terminal:
 
 ```sh
-# Source Vivado and Vitis' settings from their respective installation directories
-source <XILINX_INSTALL_DIR>/Vivado/2021.2/settings64.sh
+# Source Vivado and Vitis settings from their respective installation directories
 source <XILINX_INSTALL_DIR>/Vitis/2021.2/settings64.sh
 
 # Make the FRACTAL Platform from scratch
 make all
 ```
+<!-- source <XILINX_INSTALL_DIR>/Vivado/2021.2/settings64.sh -->
 
 It executes the following tasks:
 
@@ -47,7 +51,7 @@ It executes the following tasks:
       1. Set platform properties ([vivado/src/pfm_decls.tcl](vivado/src/pfm_decls.tcl))
       1. QOR settings ([vivado/src/qor_scripts/](vivado/src/qor_scripts/))
       1. Generate output products ([vivado/src/platform_xsa.tcl](vivado/src/platform_xsa.tcl))
-1. Build PetaLinux Docker container (`make petalinux-2021.2_docker`)
+1. (Optional) Build PetaLinux Docker container (`make petalinux-2021.2_docker`)
    1. Clean the Docker image if required (`make clean_docker`)
    1. Build the Docker image ([Dockerfile](Dockerfile))
 1. Build OS with PetaLinux (`make petalinux_os` :fast_forward: Docker :fast_forward: [petalinux/](petalinux/) `make all`)
@@ -63,12 +67,18 @@ It executes the following tasks:
    1. Build project ([petalinux/](petalinux/) `make update_build`)
    1. Package BOOT Image for base platforms ([petalinux/](petalinux/) `make update_bootimage`)
    1. Build & Package SysRoot for SDK/Vitis ([petalinux/](petalinux/) `make update_sysroot`)
-1. Build SW platform on Vitis (`make sw_platform` :fast_forward: [vitis/](vitis/) `make all`)
-   1. Clean the [vitis/](vitis/) directory ([vitis/](vitis/) `make clean`)
-   1. Copy over necessary Vivado files ([vitis/](vitis/) `make import_from_vivado`)
-   1. Copy over necessary PetaLinux files ([vitis/](vitis/) `make import_from_petalinux`)
-   1. Create the Vitis platform ([vitis/](vitis/) `make sw_platform` :fast_forward:[vitis/src/build_sw_platform.tcl](vitis/src/build_sw_platform.tcl))
-   1. ...
+   1. Extract Versal Common Image from Xilinx's archive ([petalinux/](petalinux/) `make common_image`)[^1]
+   1. Create the `sd_card` directory with all required files for flashing the image to a compatible SD card ([petalinux/](petalinux/) `make sd_card`)
+<!-- 1. Build SW platform on Vitis (`make sw_platform` :fast_forward: [vitis/](vitis/) `make all`) -->
+   <!-- 1. Clean the [vitis/](vitis/) directory ([vitis/](vitis/) `make clean`) -->
+   <!-- 1. Copy over necessary Vivado files ([vitis/](vitis/) `make import_from_vivado`) -->
+   <!-- 1. Copy over necessary PetaLinux files ([vitis/](vitis/) `make import_from_petalinux`) -->
+   <!-- 1. Create the Vitis platform ([vitis/](vitis/) `make sw_platform` :fast_forward:[vitis/src/build_sw_platform.tcl](vitis/src/build_sw_platform.tcl)) -->
+   <!-- 1. ... -->
+
+[^1]: During development of this platform, major roadblocks have been found such that the platform was not able to boot on HW with the output products from PetaLinux. We believe that the platform workflow is not yet ready for the Versal ACAP family of devices and that some of the PetaLinux Tool commands are not generating the appropriate images. Therefore, we recommend using the Versal common image offered by Xilinx as much as possible. For this project, only the BOOT.BIN binary and the RootFS image are used from the build process. The rest of the required files are taken from the the Versal Common Image.
+
+To boot the Fractal Versal Platform image on HW, follow the instructions described on the [UG1144-PetaLinux Tools Documentation: Reference Guide](https://docs.xilinx.com/r/2021.2-English/ug1144-petalinux-tools-reference-guide/Steps-to-Boot-a-PetaLinux-Image-on-Hardware-with-SD-Card) under the section *Packaging and Booting > Booting PetaLinux Image on Hardware with an SD Card > Steps to Boot a PetaLinux Image on Hardware with SD card > Steps to Flash and Boot the PetaLinux Images Manually*.
 
 Additional `make` targets are:
 
@@ -118,7 +128,7 @@ The following diagram explains the build-flow dependencies.
 > **Notes:**
 >
 > - The diagram should be read from top to down.
-> - The diagram is for illustration only. The actual build-flow is more sequential than this.
+> - The diagram is for illustration only. The actual build-flow is more sequential.
 
 ```mermaid
 graph TD
@@ -188,7 +198,7 @@ FRACTAL custom platform:
   - **Yes**, configurable to output through I2C or PMBus -->
 - PetaLinux configuration:
   - Main configuration: `petalinux-config` ([project-spec/configs/config](./petalinux/)):
-    - Automatic **HW** configuration
+    <!-- - Automatic **HW** configuration -->
     - **DTG** Settings:
       - Machine name (`CONFIG_SUBSYSTEM_MACHINE_NAME`):
         - `versal-vck190-reva-x-ebm-01-reva` (if using the BSP)
@@ -197,8 +207,8 @@ FRACTAL custom platform:
       - Target (`CONFIG_SUBSYSTEM_UBOOT_CONFIG_TARGET`):
         - `xilinx_versal_virt_defconfig`
     - **Image Packaging** configuration:
-      - Disable Initial RAM File System: _initramfs_ (`SUBSYSTEM_ROOTFS_INITRAMFS`)
-      - Enable Initial RAM Disk: _initrd_ (`SUBSYSTEM_ROOTFS_INITRD`)
+      - Disable Initial RAM File System: `initramfs` (`SUBSYSTEM_ROOTFS_INITRAMFS`)
+      - Enable Initial RAM Disk: `initrd` (`SUBSYSTEM_ROOTFS_INITRD`)
       - Initial RAM File System name (`CONFIG_SUBSYSTEM_INITRAMFS_IMAGE_NAME`):
         - `petalinux-image-minimal`
       - Root FS formats (`CONFIG_SUBSYSTEM_RFS_FORMATS`):
@@ -217,7 +227,7 @@ FRACTAL custom platform:
       - Board name (`CONFIG_SUBSYSTEM_BOARD_NAME`):
         - `vck190`
       - Enable extended Yocto build tools (`YOCTO_BUILDTOOLS_EXTENDED`)
-      - _(Optional):_
+      - (_Optional_)
         - Enable local Linux/Yocto sources (`CONFIG_YOCTO_BB_NO_NETWORK`)
         - Disable network Linux/Yocto sources (`CONFIG_YOCTO_NETWORK_SSTATE_FEEDS`)
         - Local sstate directory (`CONFIG_YOCTO_LOCAL_SSTATE_FEEDS_URL`):
@@ -226,26 +236,46 @@ FRACTAL custom platform:
     - **File System** packages:
       - Base:
         - Dandified YUM package manager (`dnf`)
-        - File System Resize Tool (`e2fsprogs-resize2fs`)
+        - File System Resize Tool (`e2fsprogs-mke2fs` & `e2fsprogs-resize2fs`)
+        - FPGA Manager Script (`fpga-manager-script`)
+        - _Haveged_ unpredictable random number generator (`haveged`)
+        - Memory Technology Devices utilities (`mtd-utils`)
       - Console:
+        - Network:
+          - CAN utilities (`can-utils`)
+          - OpenSSH (`openssh`, `openssh-ssh`, `openssh-sftp`, `openssh-sftp-server` & `openssh-sshd`)
         - Tools:
           - Partition Editor (`parted`)
+        - Utilities:
+          - Advanced Linux Sound Architecture (`alsa-tools` & `alsa-utils`)
+          - Bash completion (`bash-completion`)
+          - File compression (`bzip2`, `gzip`, `unzip` & 'zip')
+          - File information (`file`)
+          - Basic directory searching utilities (`findutils`)
+          - GNU Awk (`gawk`)
+          - Git version control (`git`)
+          - Global Regular Expression Print (`grep`)
+          - HDD parameters (`hdparm`)
+          - File visualization tool (`less`)
+          - LMbench performance analysis (`lmbench`)
+          - PCI utilities (`pciutils`)
+          - (`pkgconfig`)
       - Development:
         - Binary utilities (`binutils`)
-        - Python (_See tables below for a detailed list of Python modules_)
+        - Python (<!--`packagegroup-petalinux-python-modules` -->_See tables below for a detailed list of Python modules_)
       - Libraries:
         - Xilinx Runtime Library (`xrt`)
         - Xilinx AI Engine driver (`ai-engine-driver`)
       - Miscellaneous:
-        - _sysfs_ library (`libsysfs`)
+        - sysfs library (`libsysfs`)
     - **PetaLinux** package groups:
       - PetaLinux basic (`packagegroup-petalinux`)
       - Sensor interface libraries (MRAA & UPM) (`packagegroup-petalinux-mraa`)
-      - Open AMP for RTOS control (`packagegroup-petalinux-openamp`)
+      - Open AMP for RTOS control (`packagegroup-petalinux-openamp)
       - Open CV (`packagegroup-petalinux-opencv`)
       - PetaLinux utilities (`packagegroup-petalinux-utils`)
     - **Image** features:
-      - Auto-login (`auto-login`)
+      - Auto login (`auto-login`)
     - **Apps**:
       - GPIO demo (`gpio-demo`)
       - Peek-Poke (`peek-poke`)

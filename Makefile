@@ -24,8 +24,8 @@ TIME			?=$(shell date "+%Y%m%d-%H%M%S")
 PLATFORM_NAME	?=fractal
 JOBS			?=4
 CONTAINER		?=FALSE
-XEN_HYPERVISOR	?=TRUE
-QEMU			?=TRUE
+XEN_HYPERVISOR	?=FALSE
+QEMU			?=FALSE
 XILINX_PATH		?=/tools/Xilinx
 XILINX_VER		?=2021.2
 
@@ -71,6 +71,7 @@ PLATFORM_DIR	:= ${PWD}
 
 PETALINUX_INSTALLER	:=${PLATFORM_DIR}/src/petalinux-v${XILINX_VER}-final-installer.run
 BSP					:=${PLATFORM_DIR}/src/xilinx-vck190-v${XILINX_VER}-final.bsp
+COMMON_IMAGE		:=${PLATFORM_DIR}/src/xilinx-versal-common-v${XILINX_VER}.tar.gz
 
 BOARD_REPO	:=${PLATFORM_DIR}/vivado/src/board_repo
 XPR_NAME	:=${PLATFORM_NAME}_platform.xpr
@@ -117,7 +118,7 @@ DOCKER_VOLUMES	:=	-v ${PLATFORM_DIR}/petalinux:/home/xilinx/petalinux \
 all:
 #	$(MAKE) clean_all
 	$(MAKE) check_all
-	$(MAKE) hw_platform
+	$(MAKE) ${XSA}
 ifeq ("${CONTAINER}","TRUE")
 	$(MAKE) petalinux-${XILINX_VER}_docker
 endif
@@ -130,12 +131,12 @@ clean_all: clean_hw_platform clean_docker clean_petalinux_os clean_sw_platform
 # REQUIREMENTS
 # =========================================================
 
-.PHONY: check_all check_vivado check_vitis check_curl check_docker
+.PHONY: check_all check_vivado check_vitis check_curl check_docker check_max_user_watches
 
 VIVADO_VER	:= $(shell vivado -version 2>/dev/null | grep "Vivado ")
 VITIS_VER	:= $(shell vitis -version 2>/dev/null | grep "Vitis " | sed 's/\*//g')
 
-check_all: check_vivado check_vitis check_docker ${PETALINUX_INSTALLER} ${BSP}
+check_all: check_vivado check_vitis check_docker check_max_user_watches ${PETALINUX_INSTALLER} ${BSP} ${COMMON_IMAGE}
 	$(WAIT) "Checking if PetaLinux installer is in the src/ directory"
 	$(OK) "PetaLinux installer"
 	$(WAIT) "Checking if VCK190 BSP is in the src/ directory"
@@ -177,7 +178,7 @@ ifeq ("${CONTAINER}","TRUE")
 	$(WAIT) "Checking Docker installation"
 ifeq (,$(shell docker -v))
 	$(INFO) "Docker not found. Installing it using ${DISTRO} tools"
-	$(MAKE) check curl
+	$(MAKE) check_curl
 	curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh
 	sudo systemctl enable docker.service
 	sudo systemctl enable containerd.service
@@ -186,12 +187,21 @@ endif
 	$(OK) "Docker installed"
 endif
 
+check_max_user_watches:
+	$(WAIT) "Modifying max_user_watches"
+	@sudo sysctl -n -w fs.inotify.max_user_watches=524288
+	$(OK) "max_user_watches modified"
+
 ${PETALINUX_INSTALLER}:
-	$(ERROR) "Missing the PetaLinux ${XILINX_VER} installer.\nPlease download it from:\nhttps://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/embedded-platforms/2021-1.html\nand place it in the ./src/ directory.\nYou can run 'make petalinux-${XILINX_VER}_docker' afterwards if necessary."
+	$(ERROR) "Missing the PetaLinux ${XILINX_VER} installer.\nPlease download it from:\nhttps://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/embedded-platforms/${XILINX_VER:.=-}.html\nand place it in the ./src/ directory.\nYou can run 'make petalinux-${XILINX_VER}_docker' afterwards if necessary."
 	$(EXIT)
 
 ${BSP}:
-	$(ERROR) "Missing the Versal AI Core series VCK190 BSP.\nPlease download it from:\nhttps://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/embedded-platforms/2021-1.html\nand place it in the ./src/ directory."
+	$(ERROR) "Missing the Versal AI Core series VCK190 BSP.\nPlease download it from:\nhttps://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/embedded-platforms/${XILINX_VER:.=-}.html\nand place it in the ./src/ directory."
+	$(EXIT)
+
+${COMMON_IMAGE}:
+	$(ERROR) "Missing the Versal Common Image.\nPlease download it from:\nhttps://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/embedded-platforms/${XILINX_VER:.=-}.html\nand place it in the ./src/ directory."
 	$(EXIT)
 
 # =========================================================
@@ -200,10 +210,8 @@ ${BSP}:
 
 .PHONY: clean_hw_platform hw_platform launch_vivado
 
+hw_platform: check_vivado ${XSA}
 ${XSA}:
-	$(MAKE) ${XSA} -C ${PLATFORM_DIR}/vivado ${MAKE_VIVADO_ARGS}
-
-hw_platform: check_vivado
 	$(MAKE) xsa -C ${PLATFORM_DIR}/vivado ${MAKE_VIVADO_ARGS}
 
 launch_vivado:
@@ -259,7 +267,7 @@ ifeq ("${CONTAINER}","TRUE")
 		--net="host" \
 		${DOCKER_ENV_VAR} \
 		${DOCKER_VOLUMES} \
-		petalinux:2021.1 \
+		petalinux:${XILINX_VER} \
 		bash -c " \
 			source ${XILINX_PATH}/PetaLinux/${XILINX_VER}/settings.sh; \
 			make all ${MAKE_PETALINUX_ARGS}"

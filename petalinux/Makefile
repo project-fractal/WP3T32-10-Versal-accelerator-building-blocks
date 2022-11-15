@@ -28,7 +28,7 @@ TIME            ?=$(shell date "+%Y%m%d-%H%M%S")
 PROJ_NAME       ?=platform
 USE_BSP         ?=TRUE
 XEN_HYPERVISOR  ?=FALSE
-QEMU            ?=TRUE
+QEMU            ?=FALSE
 XILINX_VER      ?=2021.2
 LINUX_BUILD_SRC ?=network
 
@@ -69,15 +69,19 @@ LINUX_TMP_DIR              ?= /tmp/petalinux
 LINUX_LOCAL_DOWNLOADS_DIR  ?= ${LINUX_TEMP_DIR}/workspace/downloads
 LINUX_LOCAL_SSTATE_DIR     ?= ${LINUX_TEMP_DIR}/workspace/sstate_aarch64_2021.2/aarch64
 
-USR_ROOTFS_APPEND	:=${PWD}/src/components/user-rootfsconfig.append
+# USR_ROOTFS_APPEND	:=${PWD}/src/components/user-rootfsconfig.append
 SRC_PATH_EXT_SRC	:=${PWD}/src/components/ext_src
-DEST_PATH_EXT_SRC	:=${PROJ_PATH}/project-spec
+# DEST_PATH_EXT_SRC	:=${PROJ_PATH}/project-spec
+
+COMMON_IMAGE	:=$(shell dirname "${PWD}")/src/xilinx-versal-common-v${XILINX_VER}.tar.gz
 
 FILE_MAIN_CFG	:=${PROJ_PATH}/project-spec/configs/config
 FILE_ROOTFS_CFG	:=${PROJ_PATH}/project-spec/configs/rootfs_config
 USR_ROOTFS_CFG	:=${PROJ_PATH}/project-spec/meta-user/conf/user-rootfsconfig
 FILE_SYSTEM_USR	:=${PROJ_PATH}/project-spec/meta-user/recipes-bsp/device-tree/files/system-user.dtsi
 DT_BBAPPEND		:=${PROJ_PATH}/project-spec/meta-user/recipes-bsp/device-tree/device-tree.bbappend
+
+# PKG_GRP_VITISAI	:=${PROJ_PATH}/components/yocto/layers/meta-petalinux/recipes-core/packagegroups/packagegroup-petalinux-vitisai.bb
 
 ROOTFS		:=${LINUX_DIR}/rootfs.ext4
 IMAGE		:=${LINUX_DIR}/Image
@@ -131,12 +135,15 @@ all: ${PROJ_PATH}
 	$(MAKE) update_all_configs
 	$(MAKE) update_build
 	$(MAKE) update_bootimage
-#	$(MAKE) update_sysroot
+	$(MAKE) update_sysroot
+	$(MAKE) sd_card
 
 clean:
 	$(WAIT) "Cleaning project"
 	$(RM) -r ${PROJ_PATH}
+	$(RM) -r common_image
 	$(RM) -r sysroot
+	$(RM) -r sd_card
 	$(RM) update_build
 	$(RM) update_bootimage
 	$(RM) update_sdk
@@ -204,7 +211,8 @@ ${DT_BBAPPEND}.original:
 update_all_configs:
 	$(MAKE) update_hw
 	$(MAKE) update_main_config
-	$(MAKE) update_kernel_config
+# Using the default linux kernel, no need to run the kernel configuration
+#	$(MAKE) update_kernel_config
 	$(MAKE) update_rootfs_config
 #	$(MAKE) update_ext_src
 #	$(MAKE) update_ext_src_config
@@ -250,6 +258,7 @@ update_hw: ${FILE_MAIN_CFG}.original ${XSA_PATH}
 		$(PASS_CONFIG_LOG)hw_config.log; \
 	} || { \
 		$(ERROR_CONFIG_LOG)hw_config.log; \
+		exit $$?; \
 	}
 	$(OK) "Successfully updated hardware"
 	$(INFO) "Recreating a backup of config"
@@ -282,10 +291,10 @@ endif
 ## Image Packaging Configuration
 #	Required for booting INITRD images with full rootfs (ramdisk.cpio.gz -> EXT4)
 #	https://support.xilinx.com/s/article/76842?language=en_US (Method 1)
-	$(MAIN_CONFIG) $(DISABLE) SUBSYSTEM_ROOTFS_INITRAMFS
-	$(MAIN_CONFIG) $(ENABLE) SUBSYSTEM_ROOTFS_INITRD
-	$(MAIN_CONFIG) $(SET_STR) CONFIG_SUBSYSTEM_INITRAMFS_IMAGE_NAME "petalinux-image-minimal"
-	$(MAIN_CONFIG) $(SET_STR) CONFIG_SUBSYSTEM_RFS_FORMATS "cpio cpio.gz cpio.gz.u-boot tar.gz jffs2 ext4"
+#	$(MAIN_CONFIG) $(DISABLE) SUBSYSTEM_ROOTFS_INITRAMFS
+#	$(MAIN_CONFIG) $(ENABLE) SUBSYSTEM_ROOTFS_INITRD
+#	$(MAIN_CONFIG) $(SET_STR) CONFIG_SUBSYSTEM_INITRAMFS_IMAGE_NAME "petalinux-image-minimal"
+#	$(MAIN_CONFIG) $(SET_STR) CONFIG_SUBSYSTEM_RFS_FORMATS "cpio cpio.gz cpio.gz.u-boot tar.gz jffs2 ext4"
 ## Firmware Version Configuration
 	$(MAIN_CONFIG) $(SET_STR) CONFIG_SUBSYSTEM_HOSTNAME "fractal_versal"
 	$(MAIN_CONFIG) $(SET_STR) CONFIG_SUBSYSTEM_PRODUCT "fractal_versal"
@@ -305,6 +314,7 @@ endif
 		$(PASS_CONFIG_LOG)main_config.log; \
 	} || { \
 		$(ERROR_CONFIG_LOG)main_config.log; \
+		exit $$?; \
 	}
 	$(OK) "Successfully configured ${FILE_MAIN_CFG}"
 
@@ -320,6 +330,7 @@ update_kernel_config:
 		$(PASS_CONFIG_LOG)kernel_config.log; \
 	} || { \
 		$(ERROR_CONFIG_LOG)kernel_config.log; \
+		exit $$?; \
 	}
 	$(OK) "Successfully configured kernel"
 
@@ -335,53 +346,48 @@ update_rootfs_config: ${FILE_ROOTFS_CFG}.original
 	$(CP) ${FILE_ROOTFS_CFG}.original ${FILE_ROOTFS_CFG}
 ## FS Packages - Base
 	$(ROOTFS_CONFIG) $(ENABLE) dnf
-#	$(ROOTFS_CONFIG) $(ENABLE) e2fsprogs-mke2fs
+	$(ROOTFS_CONFIG) $(ENABLE) e2fsprogs-mke2fs
 	$(ROOTFS_CONFIG) $(ENABLE) e2fsprogs-resize2fs
-#	$(ROOTFS_CONFIG) $(ENABLE) fpga-manager-script
-#	$(ROOTFS_CONFIG) $(ENABLE) haveged
-#	$(ROOTFS_CONFIG) $(ENABLE) mtd-utils
+	$(ROOTFS_CONFIG) $(ENABLE) fpga-manager-script
+	$(ROOTFS_CONFIG) $(ENABLE) haveged
+	$(ROOTFS_CONFIG) $(ENABLE) mtd-utils
 ## FS Packages - Console - Network
-#	$(ROOTFS_CONFIG) $(ENABLE) can-utils
-#	$(ROOTFS_CONFIG) $(ENABLE) openssh-sftp-server
+	$(ROOTFS_CONFIG) $(ENABLE) can-utils
+	$(ROOTFS_CONFIG) $(ENABLE) openssh
+	$(ROOTFS_CONFIG) $(ENABLE) openssh-ssh
+	$(ROOTFS_CONFIG) $(ENABLE) openssh-sftp
+	$(ROOTFS_CONFIG) $(ENABLE) openssh-sftp-server
+	$(ROOTFS_CONFIG) $(ENABLE) openssh-sshd
 ## FS Packages - Console - Tools
 	$(ROOTFS_CONFIG) $(ENABLE) parted
 ## FS Packages - Console - Utils
-#	$(ROOTFS_CONFIG) $(ENABLE) alsa-tools
-#	$(ROOTFS_CONFIG) $(ENABLE) alsa-utilss
-#	$(ROOTFS_CONFIG) $(ENABLE) bash-completion
-#	$(ROOTFS_CONFIG) $(ENABLE) bzip2
-#	$(ROOTFS_CONFIG) $(ENABLE) file
-#	$(ROOTFS_CONFIG) $(ENABLE) findutils
-#	$(ROOTFS_CONFIG) $(ENABLE) gawk
-#	$(ROOTFS_CONFIG) $(ENABLE) git
-#	$(ROOTFS_CONFIG) $(ENABLE) grep
-#	$(ROOTFS_CONFIG) $(ENABLE) groff
-#	$(ROOTFS_CONFIG) $(ENABLE) gzip
-#	$(ROOTFS_CONFIG) $(ENABLE) hdparm
-#	$(ROOTFS_CONFIG) $(ENABLE) less
-#	$(ROOTFS_CONFIG) $(ENABLE) lmbench
-#	$(ROOTFS_CONFIG) $(ENABLE) ltp
-#	$(ROOTFS_CONFIG) $(ENABLE) man
-#	$(ROOTFS_CONFIG) $(ENABLE) man-pages
-#	$(ROOTFS_CONFIG) $(ENABLE) mc
-#	$(ROOTFS_CONFIG) $(ENABLE) pciutils
-#	$(ROOTFS_CONFIG) $(ENABLE) pkgconfig
-#	$(ROOTFS_CONFIG) $(ENABLE) screen
-#	$(ROOTFS_CONFIG) $(ENABLE) sed
-#	$(ROOTFS_CONFIG) $(ENABLE) setserial
-#	$(ROOTFS_CONFIG) $(ENABLE) smartmontools
-#	$(ROOTFS_CONFIG) $(ENABLE) strace
-#	$(ROOTFS_CONFIG) $(ENABLE) sysstat
-#	$(ROOTFS_CONFIG) $(ENABLE) texinfo
-#	$(ROOTFS_CONFIG) $(ENABLE) unzip
-#	$(ROOTFS_CONFIG) $(ENABLE) vim
-#	$(ROOTFS_CONFIG) $(ENABLE) zip
+	$(ROOTFS_CONFIG) $(ENABLE) alsa-tools
+	$(ROOTFS_CONFIG) $(ENABLE) alsa-utils
+	$(ROOTFS_CONFIG) $(ENABLE) bash-completion
+	$(ROOTFS_CONFIG) $(ENABLE) bzip2
+	$(ROOTFS_CONFIG) $(ENABLE) file
+	$(ROOTFS_CONFIG) $(ENABLE) findutils
+	$(ROOTFS_CONFIG) $(ENABLE) gawk
+	$(ROOTFS_CONFIG) $(ENABLE) git
+	$(ROOTFS_CONFIG) $(ENABLE) grep
+	$(ROOTFS_CONFIG) $(ENABLE) gzip
+	$(ROOTFS_CONFIG) $(ENABLE) hdparm
+	$(ROOTFS_CONFIG) $(ENABLE) less
+	$(ROOTFS_CONFIG) $(ENABLE) lmbench
+	$(ROOTFS_CONFIG) $(ENABLE) pciutils
+	$(ROOTFS_CONFIG) $(ENABLE) pkgconfig
+	$(ROOTFS_CONFIG) $(ENABLE) screen
+	$(ROOTFS_CONFIG) $(ENABLE) sed
+	$(ROOTFS_CONFIG) $(ENABLE) setserial
+	$(ROOTFS_CONFIG) $(ENABLE) smartmontools
+	$(ROOTFS_CONFIG) $(ENABLE) sysstat
+	$(ROOTFS_CONFIG) $(ENABLE) unzip
+	$(ROOTFS_CONFIG) $(ENABLE) zip
 ## FS Packages - Development
 	$(ROOTFS_CONFIG) $(ENABLE) binutils
-#	$(ROOTFS_CONFIG) $(ENABLE) make
-#	# $(ROOTFS_CONFIG) $(ENABLE) ruby
-#	$(ROOTFS_CONFIG) $(ENABLE) run-postinsts
-#	$(ROOTFS_CONFIG) $(ENABLE) tcl
+	$(ROOTFS_CONFIG) $(ENABLE) make
+	$(ROOTFS_CONFIG) $(ENABLE) run-postinsts
+	$(ROOTFS_CONFIG) $(ENABLE) tcl
 ## FS Packages - Development - Python
 	$(ROOTFS_CONFIG) $(ENABLE) packagegroup-petalinux-python-modules
 	$(ROOTFS_CONFIG) $(ENABLE) python
@@ -519,42 +525,35 @@ update_rootfs_config: ${FILE_ROOTFS_CFG}.original
 ## FS Packages - Libraries
 	$(ROOTFS_CONFIG) $(ENABLE) ai-engine-driver
 	$(ROOTFS_CONFIG) $(ENABLE) xrt
-#	$(ROOTFS_CONFIG) $(ENABLE) zocl
+	$(ROOTFS_CONFIG) $(ENABLE) zocl
 ## FS Packages - Miscellaneous
-#	$(ROOTFS_CONFIG) $(ENABLE) udev-extraconf
-#	$(ROOTFS_CONFIG) $(ENABLE) libstdcPLUSPLUS
-#	$(ROOTFS_CONFIG) $(ENABLE) packagegroup-core-boot
-#	$(ROOTFS_CONFIG) $(ENABLE) packagegroup-core-ssh-dropbear
-#	# $(ROOTFS_CONFIG) $(ENABLE) qemu
+	$(ROOTFS_CONFIG) $(ENABLE) udev-extraconf
+	$(ROOTFS_CONFIG) $(ENABLE) libstdcPLUSPLUS
+	$(ROOTFS_CONFIG) $(ENABLE) packagegroup-core-boot
+	$(ROOTFS_CONFIG) $(DISABLE) packagegroup-core-ssh-dropbear
 	$(ROOTFS_CONFIG) $(ENABLE) libsysfs
-#	$(ROOTFS_CONFIG) $(ENABLE) tcf-agent
+	$(ROOTFS_CONFIG) $(ENABLE) tcf-agent
 ## FS Packages - Network
-#	$(ROOTFS_CONFIG) $(ENABLE) bridge-utils
+	$(ROOTFS_CONFIG) $(ENABLE) bridge-utils
 ## FS Packages - Utilities
-#	$(ROOTFS_CONFIG) $(ENABLE) u-boot-tools
+	$(ROOTFS_CONFIG) $(ENABLE) u-boot-tools
 ## PetaLinux Package Groups
 	$(ROOTFS_CONFIG) $(ENABLE) packagegroup-petalinux
 	$(ROOTFS_CONFIG) $(ENABLE) packagegroup-petalinux-mraa
 	$(ROOTFS_CONFIG) $(ENABLE) packagegroup-petalinux-openamp
 	$(ROOTFS_CONFIG) $(ENABLE) packagegroup-petalinux-opencv
+#	$(ROOTFS_CONFIG) $(ENABLE) packagegroup-petalinux-self-hosted
 	$(ROOTFS_CONFIG) $(ENABLE) packagegroup-petalinux-utils
 ## Image Features
-#	$(ROOTFS_CONFIG) $(ENABLE) imagefeature-ssh-server-dropbear
-#	$(ROOTFS_CONFIG) $(DISABLE) imagefeature-ssh-server-openssh
-#	$(ROOTFS_CONFIG) $(ENABLE) imagefeature-hwcodecs
-#	$(ROOTFS_CONFIG) $(DISABLE) imagefeature-package-management
-#	$(ROOTFS_CONFIG) $(ENABLE) imagefeature-debug-tweaks
+	$(ROOTFS_CONFIG) $(DISABLE) imagefeature-ssh-server-dropbear
+	$(ROOTFS_CONFIG) $(ENABLE) imagefeature-ssh-server-openssh
+	$(ROOTFS_CONFIG) $(ENABLE) imagefeature-hwcodecs
+	$(ROOTFS_CONFIG) $(ENABLE) imagefeature-debug-tweaks
 	$(ROOTFS_CONFIG) $(ENABLE) auto-login
 ## Apps
-#	$(ROOTFS_CONFIG) $(ENABLE) aie-oob
+	$(ROOTFS_CONFIG) $(ENABLE) aie-oob
 	$(ROOTFS_CONFIG) $(ENABLE) gpio-demo
 	$(ROOTFS_CONFIG) $(ENABLE) peekpoke
-## User packages
-#	$(ROOTFS_CONFIG) $(ENABLE) aie-notebooks
-#	$(ROOTFS_CONFIG) $(ENABLE) openamp-demo-notebooks
-#	$(ROOTFS_CONFIG) $(ENABLE) packagegroup-petalinux-jupyter
-#	$(ROOTFS_CONFIG) $(ENABLE) pm-notebooks
-#	$(ROOTFS_CONFIG) $(ENABLE) python3-ipywidgets
 # Configure
 	$(OK) "Successfully updated ${FILE_ROOTFS_CFG}"
 	$(WAIT) "Configuring ${FILE_ROOTFS_CFG}"
@@ -562,6 +561,7 @@ update_rootfs_config: ${FILE_ROOTFS_CFG}.original
 		$(PASS_CONFIG_LOG)rootfs_config.log; \
 	} || { \
 		$(ERROR_CONFIG_LOG)rootfs_config.log; \
+		exit $$?; \
 	}
 	$(OK) "Successfully configured ${FILE_ROOTFS_CFG}"
 
@@ -571,121 +571,136 @@ update_rootfs_config: ${FILE_ROOTFS_CFG}.original
 
 .PHONY: update_ext_src update_ext_src_config clean_ext_src clean_extra_layers
 
-PKG_GRP_VITISAI	:=${PROJ_PATH}/components/yocto/layers/meta-petalinux/recipes-core/packagegroups/packagegroup-petalinux-vitisai.bb
-
 update_ext_src: clean_ext_src
 	$(WAIT) "Updating external source code"
-#	$(INFO) "Cloning meta-tensorflow from yoctoproject.org"
-#	@git clone -b thud git://git.yoctoproject.org/meta-tensorflow ${SRC_PATH_EXT_SRC}/meta-tensorflow
-	$(INFO) "Cloning meta-vitis-ai from github.com"
-	@git clone -b rel-v2021.1 https://github.com/Xilinx/meta-vitis-ai.git ${SRC_PATH_EXT_SRC}/meta-vitis-ai
-	$(ECHO) "packagegroup-petalinux-vitisai" >> \
-		${USR_ROOTFS_APPEND}
-	$(CP) ${PKG_GRP_VITISAI} ${PKG_GRP_VITISAI}.original
-	@cat ${PKG_GRP_VITISAI} | \
-		tr '\n' '\f' | \
-		sed -e 's?\f    dnndk \\\f?\f?' | \
-		tr '\f' '\n' | \
-		tee ${PKG_GRP_VITISAI} > \
-		/dev/null
+	${PWD}/src/components/vitis-ai.sh --import -s ${SRC_PATH_EXT_SRC}
 	$(OK) "Successfully updated external source code"
+##	$(INFO) "Cloning meta-tensorflow from yoctoproject.org"
+##	@git clone -b thud git://git.yoctoproject.org/meta-tensorflow ${SRC_PATH_EXT_SRC}/meta-tensorflow
+#	$(INFO) "Cloning meta-vitis-ai from github.com"
+##	https://github.com/Xilinx/Vitis-AI/tree/master/tools/Vitis-AI-Recipes#to-install-the-vai20-online
+#	@git clone -b rel-v2021.2 https://github.com/Xilinx/meta-vitis-ai.git ${SRC_PATH_EXT_SRC}/meta-vitis-ai
+#	$(ECHO) "packagegroup-petalinux-vitisai" >> \
+#		${USR_ROOTFS_APPEND}
+#	$(CP) ${PKG_GRP_VITISAI} ${PKG_GRP_VITISAI}.original
+#	@cat ${PKG_GRP_VITISAI} | \
+#		tr '\n' '\f' | \
+#		sed -e 's?\f    dnndk \\\f?\f?' | \
+#		tr '\f' '\n' | \
+#		tee ${PKG_GRP_VITISAI} > \
+#		/dev/null
 
 update_ext_src_config: ${FILE_MAIN_CFG}.original ${FILE_ROOTFS_CFG}.original ${USR_ROOTFS_CFG}.original
 	$(WAIT) "Updating external source code configuration"
-	$(WAIT) "Proceding to add the following layers to the PetaLinux project:"
-	$(INFO) "$(shell ls ${SRC_PATH_EXT_SRC})"
-	@COUNTER=0; \
-	for i in $(shell ls ${SRC_PATH_EXT_SRC}); do \
-		echo "[INFO] Adding $${i} external layer"; \
-		rm -rf ${DEST_PATH_EXT_SRC}/$${i}; \
-		mkdir ${DEST_PATH_EXT_SRC}/$${i}; \
-		cp -r ${SRC_PATH_EXT_SRC}/$${i} ${DEST_PATH_EXT_SRC}; \
-		sed -i "s?CONFIG_USER_LAYER_$${COUNTER}=.*?CONFIG_USER_LAYER_$${COUNTER}=\"${DEST_PATH_EXT_SRC}/$${i}\"\nCONFIG_USER_LAYER_$$((COUNTER+1))=\"\"?" ${FILE_MAIN_CFG}; \
-		COUNTER=$$((COUNTER+1)); \
-	done;
-	$(OK) "Successfully added the external layers"
-	$(WAIT) "Configuring ${FILE_MAIN_CFG}"
-	$(PETALINUX_CONFIG) && { \
-		$(PASS_CONFIG_LOG)ext_src_main_config.log; \
-	} || { \
-		$(ERROR_CONFIG_LOG)ext_src_main_config.log; \
-	}
-	$(OK) "Successfully configured ${FILE_MAIN_CFG}"
-	$(WAIT) "Adding user packages to ${USR_ROOTFS_CFG}"
-	@for i in ${USR_ROOTFS_APPEND}; do \
-		echo "CONFIG_$${i}" >> ${USR_ROOTFS_CFG}; \
-		${PWD}/src/config --file ${FILE_ROOTFS_CFG} ${ENABLE} $${i}; \
-	done;
-	$(OK) "Successfully added the user packages"
+	${PWD}/src/components/vitis-ai.sh --config -s ${SRC_PATH_EXT_SRC} -p ${PROJ_PATH}
 	$(WAIT) "Configuring ${FILE_ROOTFS_CFG}"
 	$(PETALINUX_CONFIG) -c rootfs && { \
 		$(PASS_CONFIG_LOG)ext_src_rootfs_config.log; \
 	} || { \
 		$(ERROR_CONFIG_LOG)ext_src_rootfs_config.log; \
+		exit $$?; \
 	}
-	$(OK) "Successfully configured ${FILE_ROOTFS_CFG}"
 	$(OK) "Successfully updated external source code configuration"
+#	$(WAIT) "Proceding to add the following layers to the PetaLinux project:"
+#	$(INFO) "$(shell ls ${SRC_PATH_EXT_SRC})"
+#	@COUNTER=0; \
+#	for i in $(shell ls ${SRC_PATH_EXT_SRC}); do \
+#		echo "[INFO] Adding $${i} external layer"; \
+#		rm -rf ${DEST_PATH_EXT_SRC}/$${i}; \
+#		mkdir ${DEST_PATH_EXT_SRC}/$${i}; \
+#		cp -r ${SRC_PATH_EXT_SRC}/$${i} ${DEST_PATH_EXT_SRC}; \
+#		sed -i \
+#			"s?CONFIG_USER_LAYER_$${COUNTER}=.*?CONFIG_USER_LAYER_$${COUNTER}=\"${DEST_PATH_EXT_SRC}/$${i}\"\nCONFIG_USER_LAYER_$$((COUNTER+1))=\"\"?" \
+#			${FILE_MAIN_CFG}; \
+#		COUNTER=$$((COUNTER+1)); \
+#	done;
+#	$(OK) "Successfully added the external layers"
+#	$(WAIT) "Configuring ${FILE_MAIN_CFG}"
+#	$(PETALINUX_CONFIG) && { \
+#		$(PASS_CONFIG_LOG)ext_src_main_config.log; \
+#	} || { \
+#		$(ERROR_CONFIG_LOG)ext_src_main_config.log; \
+#		exit $$?; \
+#	}
+#	$(OK) "Successfully configured ${FILE_MAIN_CFG}"
+#	$(WAIT) "Adding user packages to ${USR_ROOTFS_CFG}"
+#	@for i in ${USR_ROOTFS_APPEND}; do \
+#		echo "CONFIG_$${i}" >> ${USR_ROOTFS_CFG}; \
+#		${PWD}/src/config --file ${FILE_ROOTFS_CFG} ${ENABLE} $${i}; \
+#	done;
+#	$(OK) "Successfully added the user packages"
+#	$(WAIT) "Configuring ${FILE_ROOTFS_CFG}"
+#	$(PETALINUX_CONFIG) -c rootfs && { \
+#		$(PASS_CONFIG_LOG)ext_src_rootfs_config.log; \
+#	} || { \
+#		$(ERROR_CONFIG_LOG)ext_src_rootfs_config.log; \
+#		exit $$?; \
+#	}
+#	$(OK) "Successfully configured ${FILE_ROOTFS_CFG}"
 
 clean_ext_src:
 	$(WAIT) "Cleaning external source components"
-	$(RM) -r ${SRC_PATH_EXT_SRC}/*
-	$(RM) ${USR_ROOTFS_APPEND}
-	@touch ${USR_ROOTFS_APPEND}
-############# PENDING #############
-# https://www.hackster.io/jack-bonnell2/xilinx-kv260-petalinux-2021-1-build-vitis-ai-libraries-dd3025
-	@cat ${PKG_GRP_VITISAI} | \
-		tr '\n' '\f' | \
-		sed -e 's?\f    opencv \\\f?\f    opencv \\\f    dnndk \\\f?' | \
-		tr '\f' '\n' | \
-		tee ${PKG_GRP_VITISAI} > \
-		/dev/null
-############ PENDING #############
+	${PWD}/src/components/vitis-ai.sh --clean -s ${SRC_PATH_EXT_SRC} -p ${PROJ_PATH}
 	$(OK) "Successfully cleaned external source components"
+#	$(RM) -r ${SRC_PATH_EXT_SRC}/*
+#	$(RM) ${USR_ROOTFS_APPEND}
+#	@touch ${USR_ROOTFS_APPEND}
+############## PENDING #############
+## https://www.hackster.io/jack-bonnell2/xilinx-kv260-petalinux-2021-1-build-vitis-ai-libraries-dd3025
+#	@cat ${PKG_GRP_VITISAI} | \
+#		tr '\n' '\f' | \
+#		sed -e 's?\f    opencv \\\f?\f    opencv \\\f    dnndk \\\f?' | \
+#		tr '\f' '\n' | \
+#		tee ${PKG_GRP_VITISAI} > \
+#		/dev/null
+############# PENDING #############
 
-clean_extra_layers:
-	$(WAIT) "Cleaning extra layers"
-	$(INFO) "Removing extra layers from the ${PROJ_NAME}/project-spec directory"
-	@COUNTER=0; \
-	for i in $(shell ls ${DEST_PATH_EXT_SRC}); do \
-		if [[ "attributes configs hw-description meta-user" != *"$${i}"* ]]; then \
-			echo "[INFO]    Removing $${i} external layer"; \
-			rm -rf ${DEST_PATH_EXT_SRC}/$${i}; \
-		fi; \
-	done;
-	$(INFO) "Removing user layers from ${FILE_MAIN_CFG}"
-	@sed -i "s?CONFIG_USER_LAYER_0=.*?CONFIG_USER_LAYER_0=\"\"?" ${FILE_MAIN_CFG}
-	@cat ${FILE_MAIN_CFG} | \
-		tr '\n' '\f' | \
-		sed -e 's?\fCONFIG_USER_LAYER_1=.*\fCONFIG_?\fCONFIG_?' | \
-		tr '\f' '\n' | \
-		tee ${FILE_MAIN_CFG} > \
-		/dev/null
-		$(WAIT) "Configuring ${FILE_MAIN_CFG}"
-	$(PETALINUX_CONFIG) && { \
-		$(PASS_CONFIG_LOG)clean_ext_src_main_config.log; \
-	} || { \
-		$(ERROR_CONFIG_LOG)clean_ext_src_main_config.log; \
-	}
-	$(OK) "Successfully configured ${FILE_MAIN_CFG}"
-	$(INFO) "Removing user packages from ${FILE_ROOTFS_CFG}"
-	@for i in ${USR_ROOTFS_APPEND}; do \
-		cat ${FILE_ROOTFS_CFG} | \
-			tr '\n' '\f' | \
-			sed -e 's?\fCONFIG_$${i}=y\f?\f?' | \
-			tr '\f' '\n' | \
-			tee ${FILE_ROOTFS_CFG} > \
-			/dev/null; \
-	done;
-	$(WAIT) "Configuring ${FILE_ROOTFS_CFG}"
-	$(PETALINUX_CONFIG) -c rootfs && { \
-		$(PASS_CONFIG_LOG)clean_ext_src_rootfs_config.log; \
-	} || { \
-		$(ERROR_CONFIG_LOG)clean_ext_src_rootfs_config.log; \
-	}
-	$(OK) "Successfully configured ${FILE_ROOTFS_CFG}"
-	$(INFO) "Restoring original ${USR_ROOTFS_CFG}"
-	$(CP) ${USR_ROOTFS_CFG}.original ${USR_ROOTFS_CFG}
-	$(OK) "Successfully cleaned extra layers"
+#clean_extra_layers:
+#	$(WAIT) "Cleaning extra layers"
+#	$(INFO) "Removing extra layers from the ${PROJ_NAME}/project-spec directory"
+#	@COUNTER=0; \
+#	for i in $(shell ls ${DEST_PATH_EXT_SRC}); do \
+#		if [[ "attributes configs hw-description meta-user" != *"$${i}"* ]]; then \
+#			echo "[INFO]    Removing $${i} external layer"; \
+#			rm -rf ${DEST_PATH_EXT_SRC}/$${i}; \
+#		fi; \
+#	done;
+#	$(INFO) "Removing user layers from ${FILE_MAIN_CFG}"
+#	@sed -i "s?CONFIG_USER_LAYER_0=.*?CONFIG_USER_LAYER_0=\"\"?" ${FILE_MAIN_CFG}
+#	@cat ${FILE_MAIN_CFG} | \
+#		tr '\n' '\f' | \
+#		sed -e 's?\fCONFIG_USER_LAYER_1=.*\fCONFIG_?\fCONFIG_?' | \
+#		tr '\f' '\n' | \
+#		tee ${FILE_MAIN_CFG} > \
+#		/dev/null
+#		$(WAIT) "Configuring ${FILE_MAIN_CFG}"
+#	$(PETALINUX_CONFIG) && { \
+#		$(PASS_CONFIG_LOG)clean_ext_src_main_config.log; \
+#	} || { \
+#		$(ERROR_CONFIG_LOG)clean_ext_src_main_config.log; \
+#		exit $$?; \
+#	}
+#	$(OK) "Successfully configured ${FILE_MAIN_CFG}"
+#	$(INFO) "Removing user packages from ${FILE_ROOTFS_CFG}"
+#	@for i in ${USR_ROOTFS_APPEND}; do \
+#		cat ${FILE_ROOTFS_CFG} | \
+#			tr '\n' '\f' | \
+#			sed -e 's?\fCONFIG_$${i}=y\f?\f?' | \
+#			tr '\f' '\n' | \
+#			tee ${FILE_ROOTFS_CFG} > \
+#			/dev/null; \
+#	done;
+#	$(WAIT) "Configuring ${FILE_ROOTFS_CFG}"
+#	$(PETALINUX_CONFIG) -c rootfs && { \
+#		$(PASS_CONFIG_LOG)clean_ext_src_rootfs_config.log; \
+#	} || { \
+#		$(ERROR_CONFIG_LOG)clean_ext_src_rootfs_config.log; \
+#		exit $$?; \
+#	}
+#	$(OK) "Successfully configured ${FILE_ROOTFS_CFG}"
+#	$(INFO) "Restoring original ${USR_ROOTFS_CFG}"
+#	$(CP) ${USR_ROOTFS_CFG}.original ${USR_ROOTFS_CFG}
+#	$(OK) "Successfully cleaned extra layers"
 
 # =========================================================
 # DEVICE TREE (deprecated)
@@ -715,6 +730,7 @@ enable_xen_hypervisor: ${FILE_SYSTEM_USR}.original ${DT_BBAPPEND}.original disab
 		$(PASS_CONFIG_LOG)enable_xen_main_config.log; \
 	} || { \
 		$(ERROR_CONFIG_LOG)enable_xen_main_config.log; \
+		exit $$?; \
 	}
 	$(OK) "Successfully configured ${FILE_MAIN_CFG}"
 	$(WAIT) "Updating ${FILE_ROOTFS_CFG}"
@@ -725,13 +741,16 @@ enable_xen_hypervisor: ${FILE_SYSTEM_USR}.original ${DT_BBAPPEND}.original disab
 		$(PASS_CONFIG_LOG)enable_xen_rootfs_config.log; \
 	} || { \
 		$(ERROR_CONFIG_LOG)enable_xen_rootfs_config.log; \
+		exit $$?; \
 	}
 	$(OK) "Successfully configured ${FILE_ROOTFS_CFG}"
 	$(WAIT) "Modifying the device tree"
 	$(INFO) "Including xen.dtsi to system-user.dtsi"
 	$(CP) ${FILE_SYSTEM_USR} ${FILE_SYSTEM_USR}.${TIME}.old
 	$(CP) ./src/xen.dtsi ${PROJ_PATH}/project-spec/meta-user/recipes-bsp/device-tree/files/xen.dtsi
-	@sed -i 's?/include/ "system-conf.dtsi"?/include/ "system-conf.dtsi"\n/include/ "xen.dtsi"\n/include/ "xen-qemu.dtsi"?' ${FILE_SYSTEM_USR}
+	@sed -i \
+		's?/include/ "system-conf.dtsi"?/include/ "system-conf.dtsi"\n/include/ "xen.dtsi"\n/include/ "xen-qemu.dtsi"?' \
+		${FILE_SYSTEM_USR}
 ifeq ("${QEMU}","TRUE")
 	$(INFO) "Disabling virtual cores for QEMU"
 	$(CP) ./src/xen-qemu.dtsi ${PROJ_PATH}/project-spec/meta-user/recipes-bsp/device-tree/files/xen-qemu.dtsi
@@ -760,6 +779,7 @@ disable_xen_hypervisor: ${FILE_SYSTEM_USR}.original ${DT_BBAPPEND}.original
 		$(PASS_CONFIG_LOG)disable_xen_main_config.log; \
 	} || { \
 		$(ERROR_CONFIG_LOG)disable_xen_main_config.log; \
+		exit $$?; \
 	}
 	$(OK) "Successfully configured ${FILE_MAIN_CFG}"
 	$(WAIT) "Updating ${FILE_ROOTFS_CFG}"
@@ -770,6 +790,7 @@ disable_xen_hypervisor: ${FILE_SYSTEM_USR}.original ${DT_BBAPPEND}.original
 		$(PASS_CONFIG_LOG)disable_xen_rootfs_config.log; \
 	} || { \
 		$(ERROR_CONFIG_LOG)disable_xen_rootfs_config.log; \
+		exit $$?; \
 	}
 	$(OK) "Successfully configured ${FILE_ROOTFS_CFG}"
 	$(WAIT) "Modifying the device tree"
@@ -803,26 +824,45 @@ update_build:
 	$(WAIT) "Updating build"
 	$(INFO) "Removing output dependencies"
 	$(RM) update_build update_bootimage update_sdk update_sysroot
+	$(INFO) "Building image"
 	$(PETALINUX_BUILD) && { \
 		$(PASS_BUILD_LOG)build.log; \
 		touch ../update_build; \
 	} || { \
 		$(ERROR_BUILD_LOG)build.log; \
+		exit $$?; \
 	}
 	$(OK) "Successfully updated build"
 
 ${BOOT} ${BOOT_BH} ${QEMU_BOOT} ${PLM} ${PSMFW} ${UBOOT} ${DTB}: update_bootimage
 update_bootimage: ${ROOTFS} ${IMAGE} ${BL31} ${BOOT_SCR}
-	$(WAIT) "Packaging BOOT image"
+	$(WAIT) "Updating BOOT image"
 	$(INFO) "Removing output dependencies"
 	$(RM) update_bootimage
+	$(INFO) "Packaging BOOT image"
 	$(PETALINUX_PACKAGE) --boot --plm --psmfw --u-boot --dtb --force && { \
 		$(PASS_PACKAGE_LOG)bootimage.log; \
 		touch ../update_bootimage; \
 	} || { \
 		$(ERROR_PACKAGE_LOG)bootimage.log; \
+		exit $$?; \
 	}
 	$(OK) "Successfully packaged BOOT image"
+
+update_wic: update_bootimage
+	$(WAIT) "Updating WIC package"
+	$(INFO) "Removing output dependencies"
+	$(RM) update_wic
+	$(INFO) "Generating WIC package"
+	$(PETALINUX_PACKAGE) --wic && { \
+		$(PASS_PACKAGE_LOG)wic.log; \
+		touch ../update_wic; \
+	} || { \
+		$(ERROR_PACKAGE_LOG)wic.log; \
+		exit $$?; \
+	}
+	$(OK) "Successfully generated WIC package"
+
 
 ${SDK}: update_sdk
 update_sdk: ${ROOTFS} ${IMAGE} ${BL31} ${BOOT_SCR}
@@ -839,6 +879,7 @@ endif
 		$(PASS_BUILD_LOG)sdk.log; touch ../update_sdk; \
 	} || { \
 		$(ERROR_BUILD_LOG)sdk.log; \
+		exit $$?; \
 	}
 ifeq (${LINUX_BUILD_SRC},"local")
 # Turn Network Access ON here, since it's not included in the MIRROR
@@ -859,8 +900,47 @@ update_sysroot: ${SDK}
 		touch ../update_sysroot; \
 	} || { \
 		$(ERROR_PACKAGE_LOG)sysroot.log; \
+		exit $$?; \
 	}
 	$(OK) "Successfully packaged sysroot"
+
+# =========================================================
+# SD CARD
+# =========================================================
+
+.PHONY: sd_card
+
+common_image: ${COMMON_IMAGE}
+	$(WAIT) "Extracting Versal common image"
+	$(RM) -r common_image
+	@tar -xvzf ${COMMON_IMAGE} -C .
+	@mv xilinx-versal-common-v${XILINX_VER} common_image
+	$(OK) "Successfully extracted Versal common image"
+
+sd_card: common_image ${BOOT} ${BOOT_SCR} ${BL31} ${IMAGE}
+	$(WAIT) "Generating SD card directory structure"
+	$(RM) -r sd_card
+	@mkdir -p sd_card/boot
+	@mkdir -p sd_card/root
+	$(INFO) "Copying valid files from Versal common image:"
+	$(INFO) "	-Linux Kernel"
+	$(CP) common_image/Image sd_card/boot/Image
+	$(INFO) "	-Yocto Project SDK (includes sysroot)"
+	$(CP) common_image/sdk.sh sd_card/boot/sdk.sh
+	$(INFO) "	-Boot script"
+	$(CP) common_image/boot.scr sd_card/boot/boot.scr
+	$(INFO) "Copying generated files from PetaLinux project:"
+	$(INFO) "	-BOOT image (includes: fractal_platform_presynth.pdi, plm.elf, psmfw.elf, system.dtb, bl31.elf & u-boot.elf)"
+	$(CP) ${BOOT} sd_card/boot/BOOT.BIN
+	$(INFO) "	-U-Boot"
+	$(CP) common_image/boot.scr sd_card/boot/boot.scr
+	$(INFO) "	-RootFS"
+	$(CP) ${ROOTFS} sd_card/root/rootfs.ext4
+# Boot script
+# 	$(CP) ${BOOT_SCR} sd_card/boot/boot.scr
+# Kernel
+# 	$(CP) ${IMAGE} sd_card/root/Image
+	$(OK) "Successfully generated SD card directory structure"
 
 # =========================================================
 # QEMU SIMULATION
@@ -874,6 +954,29 @@ qemu: update_bootimage
 		tee ${PWD}/qemu > \
 		/dev/null
 	@chmod +x ${PWD}/qemu
-	@script -q ${PWD}/${TIME}_qemu.log -c ${PWD}/qemu
-	$(RM) ${PWD}/qemu
+	@script -q ${PWD}/${TIME}_qemu.log -c ${PWD}/qemu && rm -f ${PWD}/qemu
+	@cat ${PWD}/${TIME}_qemu.log | \
+		tr -d '\f' | \
+		tr -d '\r' | \
+		tee ${PWD}/${TIME}_qemu.log > \
+		/dev/null
+	$(CP) ${PWD}/${TIME}_qemu.log ${PWD}/${TIME}_qemu_trimmed.log
+	@sed -i -E \
+		"s#\[[ [:digit:]]{5}\.[[:digit:]]{3,6}\]#[    0.000000]#gI" \
+		${PWD}/${TIME}_qemu_trimmed.log
+	@sed -i -E \
+		"s#[ ]*[[:digit:]\.]+ (([mn]s)|([KM](i)?(B(\/s(ec)?)?)?)|([KM]?Byte(s)?))# 0 \1#gI" \
+		${PWD}/${TIME}_qemu_trimmed.log
+	@sed -i -E \
+		"s#([[:alnum:]]{2}:){5,19}([[:alnum:]]{2})#00:00:00:00:00:00#gI" \
+		${PWD}/${TIME}_qemu_trimmed.log
+	@sed -i -E \
+		"s#[[:digit:]]{4}-[[:digit:]]{1,2}-[[:digit:]]{1,2}[ T][[:digit:]]{1,2}:[[:digit:]]{1,2}:[[:digit:]]{2}([\+\-][[:digit:]]{2}:[[:digit:]]{2})?#0000-00-00 00:00:00#gI" \
+		${PWD}/${TIME}_qemu_trimmed.log
+	@sed -i -E \
+		"s#/tmp\.[[:alnum:]]+#/tmp\.rnd#gI" \
+		${PWD}/${TIME}_qemu_trimmed.log
+	@sed -i -E \
+		"s#(ssh-rsa )?.* ?root@fractal_versal#\1 root@fractal_versal:~#g" \
+		${PWD}/${TIME}_qemu_trimmed.log
 	$(OK) "Exited from QEMU"
