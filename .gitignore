@@ -1,0 +1,67 @@
+#
+# Copyright 2021 Xilinx, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+log
+*.log
+*.vcd
+*.wdb
+*.bin
+*.o
+*.elf
+*.xpe
+*.pdi
+*.mmi
+*.str
+*.xo
+*.xsa
+*.xclbin
+*.pb
+*.jou
+.Xil
+ultra96_x
+zcu10?_x
+build*/
+sd_card*/
+.vscode
+*.ltx
+*.str
+*.xclbin
+*.info
+*_summary
+*.cdo
+*.bsp
+*.old
+
+# Makefile tokens
+petalinux-*_docker
+petalinux_os
+sw_platform
+
+# Unnecessary files
+src/petalinux-v*installer.run
+ip/vadd/.ipcache
+ip/vadd/_x
+ip/aie/Work
+ip/aie/*.a
+ip/*/*.xml
+vitis/.metadata
+vitis/RemoteSystemsTempFiles
+vitis/.analytics
+vitis/*_device_tree
+vitis/src/import_from_petalinux/boot/*
+vitis/src/import_from_petalinux/image/*
+vitis/src/import_from_petalinux/sw_comp/*
+vitis/src/import_from_vivado/*
