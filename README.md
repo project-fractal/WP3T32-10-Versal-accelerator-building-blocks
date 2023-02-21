@@ -11,6 +11,12 @@ This repository includes all necessary files and scripts for developing a Vitis 
 
 ## Getting Started
 
+> **Quick-start:**
+> 
+> The VCK190 image provided by Xilinx in the [Vitis AI User Guide](https://docs.xilinx.com/r/3.0-English/ug1414-vitis-ai/Flashing-the-OS-Image-to-the-SD-Card) is suited for most use cases without further customization. The image provided in version 3.0 of this document has been successfully validated on HW, and has all the features provided in this repository available either natively or through the [DNF package manager](https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18842406/Dnf+package+manager).
+> 
+> In case there would be any further HW or PetaLinux requirement not covered by the Xilinx's image, then proceed with the following guide to customize the Vivado Project and the PetaLinux configuration to generate a new Versal image for the Vitis Unified Software Platform.
+
 The whole build flow requires [Vitis Core Development Kit](https://www.xilinx.com/products/design-tools/vitis/vitis-platform.html) version 2021.2 installed in the host machine with a suitable license for Vivado&reg; Design Suite (a temporary license for Versal devices should be enough). It is available from the following link: [Vitis (SW Developer) - Download link](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/vitis/2021-2.html).
 
 Additionally, download the PetaLinux installer to the [src/](src/) directory (it is available from [Xilinx's website](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/embedded-platforms/2021-2.html)). It is required to build the PetaLinux OS.
